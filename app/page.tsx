@@ -507,7 +507,7 @@ export default function Page() {
         </button>
 
         <a
-          href="https://drive.google.com/drive/u/0/folders/19OIBYhbJe7qxBFVb3ELuQ2SVzQgjQrWh"
+          href="https://drive.google.com/drive/folders/1qjlwQb-vuyPcv2VkNh8x5B3vulErvNSu"
           target="_blank"
           rel="noopener noreferrer"
           className={`${
