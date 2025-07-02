@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+/* In your global CSS or index.css */
+:root {
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-eb-garamond: var(--font-eb-garamond)
+}
+
+
+html, body, #root {
+  --background: #5f0909 !important;  min-height: 100vh;
+}
+
+/* Ensure it works in both color scheme preferences */
+@media (prefers-color-scheme: light) {
+  html, body, #root {
+  --background: #5f0909 !important;  }
+}
+
+@media (prefers-color-scheme: dark) {
+  html, body, #root {
+    --background: #5f0909 !important;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --foreground: #edc160; /* Font colour of the foreground? */
+  }
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --foreground: #edc160; /* Font colour of the foreground? */
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif, serif;
+}
+
+.box-title {
+  padding: 2 4px;
+  border-radius: 10px;
+  border-style: solid;
+  border-width: 1px;
+  border-color: #edc160;
+  background-color: #8f4806;
+  max-width: 360px;
+  position: relative
+}
+.garamond-title {
+  font-family: var(--font-eb-garamond);
+  font-weight: 500;
+  color: #edc160;
+  font-size: x-large;
+  text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.25)
+}
+.garamond {
+  font-family: var(--font-eb-garamond);
+  font-weight: 500;
+  color: #edc160;
+  font-size: large;
+  text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.25)
+}
+.box-text {
+  padding: 2 4px;
+  border-radius: 10px;
+  border-style: solid;
+  border-width: 1px;
+  border-color: #edc160;
+  background-color: #8f4806;
+  max-width: 360px
+}
+.box {
+  padding: 2 4px;
+  border-radius: 10px;
+  border-style: solid;
+  border-width: 1px;
+  border-color: #edc160;
+  background-color: #8f4806 
+}
+.box-loading {
+  padding: 2 4px;
+  border-radius: 10px;
+  border-style: solid;
+  border-width: 1px;
+  border-color: #edc160;
+  background-color: gray 
+}
+
+.box:hover:not(:disabled) {
+  background-color: white;
+  color: #8f4806
+}
+
+.gold-color { 
+  border-color: #edc160;
+}
+
+.box:disabled {  
+  background-color: gray;
+  cursor: not-allowed;
+  color: #ccc;
+}
+.border {
+  background-image: url("/border.png");
+  background-size: contain;
+  position: center;
+  margin-left: -7px;
+  background-repeat: no-repeat;
+  width: 320px;
+  height: 150px;
+  border: none
+}
+.photo {
+  width: 100%;          /* or a fixed width, e.g. 300px */
+  max-width: 360px;     /* optional max width */
+  height: auto;         /* keep aspect ratio */
+  object-position: center; /* center the image */
+  border-radius: 12px;  /* if you want rounded corners */
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  border: none;
+  padding-top: 10px;
+  margin-left: 1px
+}
+
+.circle_1 {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: rgb(201, 187, 187);
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+.circle_1:hover:not(:disabled) {
+  background-color: white;
+  color: #8f4806
+}
+
+.camera {
+  background-image: url("/camera.png");
+  background-size: contain;       /* Ensures full image fits */
+  background-repeat: no-repeat;   /* Prevents tiling */
+  background-position: center;    /* Center the image */
+  width: 70px;
+  height: 70px;
+  border: solid;
+  border-color: #213e9f;
+  filter: invert(1);
+}
