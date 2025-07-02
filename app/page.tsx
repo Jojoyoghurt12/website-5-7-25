@@ -1,3 +1,5 @@
+// Updated page.tsx with chunked photo uploads
+
 "use client"
 
 import React, { useRef, useState } from "react";
@@ -17,9 +19,6 @@ export default function Page() {
 
   // Video upload states
   const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoUploading, setVideoUploading] = useState(false);
-  const [videoProgress, setVideoProgress] = useState(0);
-  const [videoUploadResult, setVideoUploadResult] = useState<any>(null);
 
   const startCamera = async (mode: "user" | "environment" = "user") => {
     setError(null);
@@ -54,29 +53,33 @@ export default function Page() {
     setCameraStarted(false);
   };
 
-  const uploadPhoto = async (imageData: string) => {
+  // Updated photo upload using chunked method
+  const uploadPhotoChunked = async (imageData: string) => {
     setUploading(true);
     setUploadResult(null);
     setError(null);
 
     try {
-      const response = await fetch("/api/upload/photo", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ imageBase64: imageData }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Upload failed");
+      // Convert base64 to blob for chunked upload
+      const base64Data = imageData.replace(/^data:image\/\w+;base64,/, "");
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
       }
-
-      const data = await response.json();
-      setUploadResult(`Upload success! File ID: ${data.fileId}`);
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/png' });
+      
+      // Create a File object from the blob
+      const file = new File([blob], `photo-${Date.now()}.png`, { type: 'image/png' });
+      
+      // Use the same chunked upload method as videos
+      const fileId = `camera-photo-${Date.now()}`;
+      await uploadFileChunked(file, fileId);
+      
+      setUploadResult(`Photo uploaded successfully!`);
     } catch (err: any) {
-      console.error("Single photo upload error:", err);
+      console.error("Photo upload error:", err);
       setError(err.message);
     } finally {
       setUploading(false);
@@ -106,10 +109,10 @@ export default function Page() {
     const dataURL = canvas.toDataURL("image/png");
     setPhoto(dataURL);
     stopCamera();
-    uploadPhoto(dataURL);
+    uploadPhotoChunked(dataURL); // Use new chunked method
   };
 
-  const compressImage = (file: File, maxWidth: number = 1920, quality: number = 0.8): Promise<string> => {
+  const compressImage = (file: File, maxWidth: number = 1920, quality: number = 0.8): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
@@ -129,8 +132,13 @@ export default function Page() {
         
         // Draw and compress
         ctx?.drawImage(img, 0, 0, width, height);
-        const compressedDataURL = canvas.toDataURL('image/jpeg', quality);
-        resolve(compressedDataURL);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Failed to compress image'));
+          }
+        }, 'image/jpeg', quality);
       };
       
       img.onerror = reject;
@@ -142,9 +150,40 @@ export default function Page() {
     startCamera(facingMode === "user" ? "environment" : "user");
   };
 
-  // Resumable upload function for large videos
+  // Generic chunked upload function for both photos and videos
+  const uploadFileChunked = async (file: File, fileId: string): Promise<any> => {
+    // Step 1: Get resumable upload URL
+    console.log(`Getting upload URL for: ${file.name}`);
+    setUploadProgress(prev => ({ ...prev, [fileId]: 5 }));
+
+    const urlResponse = await fetch('/api/upload/video-url', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        filename: file.name,
+        mimeType: file.type,
+        fileSize: file.size
+      })
+    });
+
+    if (!urlResponse.ok) {
+      const errorData = await urlResponse.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to get upload URL');
+    }
+
+    const { uploadUrl } = await urlResponse.json();
+    setUploadProgress(prev => ({ ...prev, [fileId]: 10 }));
+
+    // Step 2: Upload using resumable upload
+    console.log(`Starting chunked upload: ${file.name}`);
+    return await resumableUpload(file, uploadUrl, fileId);
+  };
+
+  // Resumable upload function for large files
   const resumableUpload = async (file: File, uploadUrl: string, fileId: string): Promise<any> => {
-    const chunkSize = 256 * 1024; // 256KB chunks - small enough to avoid timeouts
+    const chunkSize = 256 * 1024; // 256KB chunks
     const totalChunks = Math.ceil(file.size / chunkSize);
     
     console.log(`Starting resumable upload: ${file.name}, ${totalChunks} chunks`);
@@ -165,8 +204,8 @@ export default function Page() {
         }
       }
       
-      // Update progress
-      const progressPercent = 10 + Math.round((end / file.size) * 85);
+      // Update progress (10% for getting URL, 90% for upload)
+      const progressPercent = 10 + Math.round((end / file.size) * 90);
       setUploadProgress(prev => ({ ...prev, [fileId]: progressPercent }));
     }
     
@@ -211,94 +250,7 @@ export default function Page() {
     });
   };
 
-  // Individual video upload function
-  const handleVideoUpload = async () => {
-    if (!videoFile) return;
-
-    setVideoUploading(true);
-    setVideoProgress(0);
-    setError(null);
-
-    try {
-      const formData = new FormData();
-      formData.append('video', videoFile);
-
-      // Create a promise to track progress (simulated since we can't track actual progress with fetch)
-      const uploadPromise = fetch("/api/upload-video", {
-        method: "POST",
-        body: formData,
-      });
-
-      // Simulate progress for better UX
-      const progressInterval = setInterval(() => {
-        setVideoProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return prev;
-          }
-          return prev + Math.random() * 15;
-        });
-      }, 500);
-
-      const response = await uploadPromise;
-      clearInterval(progressInterval);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorMessage = "Video upload failed";
-        try {
-          const errorJson = JSON.parse(errorText);
-          errorMessage = errorJson.error || errorMessage;
-        } catch {
-          errorMessage = `Upload failed: ${response.status} ${response.statusText}`;
-        }
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
-      setVideoProgress(100);
-      setVideoUploadResult(result);
-      console.log(`Successfully uploaded video: ${videoFile.name}`);
-
-    } catch (error: any) {
-      console.error('Video upload error:', error);
-      setError(error.message);
-      setVideoProgress(0);
-    } finally {
-      setVideoUploading(false);
-    }
-  };
-
-  const handleVideoFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
-    if (selectedFile) {
-      // Validate file type
-      if (!selectedFile.type.startsWith('video/')) {
-        setError('Please select a video file');
-        return;
-      }
-      
-      // Validate file size (e.g., max 500MB)
-      const maxSize = 500 * 1024 * 1024; // 500MB
-      if (selectedFile.size > maxSize) {
-        setError('File size must be less than 500MB');
-        return;
-      }
-
-      setVideoFile(selectedFile);
-      setError(null);
-      setVideoUploadResult(null);
-    }
-  };
-
-  const resetVideoUpload = () => {
-    setVideoFile(null);
-    setVideoProgress(0);
-    setVideoUploadResult(null);
-    setVideoUploading(false);
-  };
-
-  // Unified upload function for both photos and videos
+  // Updated unified upload function
   const handleUnifiedUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
@@ -317,36 +269,21 @@ export default function Page() {
 
         try {
           if (file.type.startsWith("image/")) {
-            // Handle image upload
+            // Handle image upload with chunked method
             console.log(`Processing image: ${file.name}`);
-            setUploadProgress(prev => ({ ...prev, [fileId]: 10 }));
+            setUploadProgress(prev => ({ ...prev, [fileId]: 5 }));
             
-            const compressedBase64 = await compressImage(file);
-            setUploadProgress(prev => ({ ...prev, [fileId]: 30 }));
-
-            const response = await fetch("/api/upload/photo", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ imageBase64: compressedBase64 }),
-            });
-
-            if (!response.ok) {
-              const responseText = await response.text();
-              let errorMessage = "Image upload failed";
-              try {
-                const errorJson = JSON.parse(responseText);
-                errorMessage = errorJson.error || errorMessage;
-              } catch {
-                errorMessage = `Upload failed: ${response.status} ${response.statusText}`;
-              }
-              throw new Error(errorMessage);
-            }
-
-            setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
+            // Compress the image first
+            const compressedBlob = await compressImage(file);
+            const compressedFile = new File([compressedBlob], file.name, { type: 'image/jpeg' });
+            
+            // Upload using chunked method
+            await uploadFileChunked(compressedFile, fileId);
+            
             console.log(`Successfully uploaded image: ${file.name}`);
 
           } else if (file.type.startsWith("video/")) {
-            // Handle video upload with resumable upload
+            // Handle video upload with chunked method
             console.log(`Processing video: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
             
             // Validate file size (max 500MB)
@@ -355,55 +292,26 @@ export default function Page() {
               throw new Error('Video file must be less than 500MB');
             }
 
-            setUploadProgress(prev => ({ ...prev, [fileId]: 5 }));
-
-            // Step 1: Get resumable upload URL from server
-            console.log('Getting Google Drive resumable upload URL...');
-            const urlResponse = await fetch('/api/upload/video-url', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                filename: file.name,
-                mimeType: file.type,
-                fileSize: file.size // Add file size for better server handling
-              })
-            });
-
-            if (!urlResponse.ok) {
-              const errorData = await urlResponse.json().catch(() => ({}));
-              throw new Error(errorData.error || 'Failed to get upload URL');
-            }
-
-            const { uploadUrl } = await urlResponse.json();
-            setUploadProgress(prev => ({ ...prev, [fileId]: 10 }));
-
-            // Step 2: Upload using resumable upload
-            console.log('Starting resumable upload to Google Drive...');
-            const uploadResult = await resumableUpload(file, uploadUrl, fileId);
-
-            setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
-            console.log(`Successfully uploaded video: ${file.name}`, uploadResult);
+            // Upload using chunked method
+            await uploadFileChunked(file, fileId);
+            
+            console.log(`Successfully uploaded video: ${file.name}`);
           }
 
         } catch (error: any) {
-            console.error(`Error uploading ${file.name}:`, error);
-            const isCorsError = error.message?.includes('CORS') || 
-                     error.message?.includes('Access-Control-Allow-Origin');
+          console.error(`Error uploading ${file.name}:`, error);
+          const isCorsError = error.message?.includes('CORS') || 
+                   error.message?.includes('Access-Control-Allow-Origin');
 
-            const isChunkError = error.message?.includes('Chunk') ||
-                    error.message?.includes('chunk')
-  
-            if (isCorsError || isChunkError) {
-              // You could add logic here to verify if upload actually succeeded
-              // For now, just don't show the error to user
-              console.log('CORS error occurred but upload may have succeeded');
-            } else {
-              // Show other types of errors
-              setError(`Failed to upload ${file.name}: ${error.message}`);
-              setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
-            }
+          const isChunkError = error.message?.includes('Chunk') ||
+                  error.message?.includes('chunk')
+
+          if (isCorsError || isChunkError) {
+            console.log('CORS error occurred but upload may have succeeded');
+          } else {
+            setError(`Failed to upload ${file.name}: ${error.message}`);
+            setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
+          }
         } finally {
           // Remove from uploading files list
           setUploadingFiles(prev => prev.filter(id => id !== fileId));
